@@ -1,3 +1,4 @@
+import base64
 import hashlib
 import json
 from pathlib import Path
@@ -10,6 +11,19 @@ sb = create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
 TILE_DATA = Path("tiles/tiles.json")
 IMAGE_DIR = Path("tiles")
 ICON_DIR = Path("icons")
+
+ICON_LABELS = {
+    "legendary.png": "legendary",
+    "Cultural.png": "cultural",
+    "Hazardous.png": "hazardous",
+    "Industrial.png": "industrial",
+    "yellowskip.png": "yellow skip",
+    "blueskip.png": "blue skip",
+    "redskip.png": "red skip",
+    "greenskip.png": "green skip",
+    "WHalpha.png": "a-hole",
+    "WHbeta.png": "b-hole",
+}
 
 
 def hash_pin(pin: str) -> str:
@@ -26,6 +40,14 @@ def load_tiles():
     return tiles, images
 
 
+def load_icons():
+    icons = {}
+    for fname in ICON_LABELS:
+        data = base64.b64encode((ICON_DIR / fname).read_bytes()).decode()
+        icons[fname] = f"data:image/png;base64,{data}"
+    return icons
+
+
 def get_config(key, default):
     rows = sb.table("config").select("value").eq("key", key).execute().data
     return rows[0]["value"] if rows else default
@@ -35,24 +57,34 @@ def set_config(key, value):
     sb.table("config").upsert({"key": key, "value": value}).execute()
 
 
-def tile_icons(t):
-    icons = []
-    icons += ["legendary.png"] * t["numlegendary"]
-    icons += ["Cultural.png"] * t["numcultural"]
-    icons += ["Hazardous.png"] * t["numhazardous"]
-    icons += ["Industrial.png"] * t["numindustrial"]
-    icons += ["yellowskip.png"] * t["numyellowskips"]
-    icons += ["blueskip.png"] * t["numblueskips"]
-    icons += ["redskip.png"] * t["numredskips"]
-    icons += ["greenskip.png"] * t["numgreenskips"]
-    icons += ["WHalpha.png"] * t["numalphawormholes"]
-    icons += ["WHbeta.png"] * t["numbetawormholes"]
-    return [str(ICON_DIR / i) for i in icons]
+def tile_icon_files(t):
+    files = []
+    files += ["legendary.png"] * t["numlegendary"]
+    files += ["Cultural.png"] * t["numcultural"]
+    files += ["Hazardous.png"] * t["numhazardous"]
+    files += ["Industrial.png"] * t["numindustrial"]
+    files += ["yellowskip.png"] * t["numyellowskips"]
+    files += ["blueskip.png"] * t["numblueskips"]
+    files += ["redskip.png"] * t["numredskips"]
+    files += ["greenskip.png"] * t["numgreenskips"]
+    files += ["WHalpha.png"] * t["numalphawormholes"]
+    files += ["WHbeta.png"] * t["numbetawormholes"]
+    return files
 
 
-st.title("Milty Draft PoC")
+def icon_row_html(t, icons):
+    imgs = "".join(
+        f'<img src="{icons[f]}" width="22" title="{ICON_LABELS[f]}" '
+        f'style="margin-right:3px">'
+        for f in tile_icon_files(t)
+    )
+    return f'<div style="height:26px">{imgs}</div>'
+
+
+st.title("TI4 Big Boy Draft")
 
 tiles, images = load_tiles()
+icons = load_icons()
 players = sb.table("players").select("*").order("id").execute().data
 
 main_tab, tiles_tab, admin_tab = st.tabs(["Main", "Tiles", "Admin"])
@@ -94,12 +126,10 @@ with tiles_tab:
                     st.image(images[tid])
                 else:
                     st.write(f"(no image {tid})")
-                icons = tile_icons(t)
-                if icons:
-                    st.image(icons, width=22)
-                st.caption(
-                    f"{t['totalres']}/{t['totalinf']} tot · "
-                    f"{t['optimalres']}/{t['optimalinf']} opt"
+                st.markdown(icon_row_html(t, icons), unsafe_allow_html=True)
+                st.markdown(
+                    f"Totals: :yellow[{t['totalres']}] :blue[{t['totalinf']}]  \n"
+                    f"Optimal: :yellow[{t['optimalres']}] :blue[{t['optimalinf']}]"
                 )
                 st.number_input(
                     "weight",
