@@ -25,6 +25,24 @@ ICON_LABELS = {
     "WHbeta.png": "b-hole",
 }
 
+DEFAULT_SLICE_SETTINGS = {
+    "blueTiles": 3,
+    "redTiles": 2,
+    "MinWormholes": 0,
+    "MaxWormholes": 99,
+    "MinLegendary": 0,
+    "MaxLegendary": 99,
+    "MinRes": 0,
+    "MaxRes": 99,
+    "MinInf": 0,
+    "MaxInf": 99,
+    "MinOptRes": 0,
+    "MaxOptRes": 99,
+    "MinOptInf": 0,
+    "MaxOptInf": 99,
+    "MinOptTotal": 10,
+    "MaxOptTotal": 14,
+}
 
 def hash_pin(pin: str) -> str:
     return hashlib.sha256(pin.encode()).hexdigest()
@@ -87,7 +105,7 @@ tiles, images = load_tiles()
 icons = load_icons()
 players = sb.table("players").select("*").order("id").execute().data
 
-main_tab, tiles_tab, admin_tab = st.tabs(["Main", "Tiles", "Admin"])
+main_tab, tiles_tab, settings_tab = st.tabs(["Main", "Tiles", "Settings"])
 
 with main_tab:
     st.subheader("Sign-up sheet")
@@ -145,10 +163,70 @@ with tiles_tab:
         set_config("tile_weights", new_weights)
         st.success("Weights saved.")
 
-with admin_tab:
+with settings_tab:
     if st.button("CLEAR ALL"):
         sb.table("players").delete().neq("id", 0).execute()
         st.rerun()
 
     if st.button(f"PROCEED WITH {len(players)} PLAYERS"):
         pass  # placeholder
+
+    st.divider()
+    st.subheader("Slice Settings")
+
+    settings = get_config("slice_settings", DEFAULT_SLICE_SETTINGS)
+    # backfill any keys added since last save
+    settings = {**DEFAULT_SLICE_SETTINGS, **settings}
+
+    pairs = [
+        ("MinWormholes", "MaxWormholes", "Wormholes"),
+        ("MinLegendary", "MaxLegendary", "Legendaries"),
+        ("MinRes", "MaxRes", "Total resources"),
+        ("MinInf", "MaxInf", "Total influence"),
+        ("MinOptRes", "MaxOptRes", "Optimal resources"),
+        ("MinOptInf", "MaxOptInf", "Optimal influence"),
+        ("MinOptTotal", "MaxOptTotal", "Optimal total"),
+    ]
+
+    c1, c2 = st.columns(2)
+    with c1:
+        st.number_input(
+            "Blue tiles per slice", min_value=0, step=1,
+            value=int(settings["blueTiles"]), key="s_blueTiles",
+        )
+    with c2:
+        st.number_input(
+            "Red tiles per slice", min_value=0, step=1,
+            value=int(settings["redTiles"]), key="s_redTiles",
+        )
+
+    for min_key, max_key, label in pairs:
+        c1, c2 = st.columns(2)
+        with c1:
+            st.number_input(
+                f"Min {label}", min_value=0.0, step=0.5,
+                value=float(settings[min_key]), key=f"s_{min_key}",
+            )
+        with c2:
+            st.number_input(
+                f"Max {label}", min_value=0.0, step=0.5,
+                value=float(settings[max_key]), key=f"s_{max_key}",
+            )
+
+    if st.button("Save settings"):
+        new_settings = {
+            "blueTiles": st.session_state["s_blueTiles"],
+            "redTiles": st.session_state["s_redTiles"],
+        }
+        for min_key, max_key, _ in pairs:
+            new_settings[min_key] = st.session_state[f"s_{min_key}"]
+            new_settings[max_key] = st.session_state[f"s_{max_key}"]
+        bad = [
+            lbl for mn, mx, lbl in pairs
+            if new_settings[mn] > new_settings[mx]
+        ]
+        if bad:
+            st.error(f"Min exceeds Max for: {', '.join(bad)}")
+        else:
+            set_config("slice_settings", new_settings)
+            st.success("Settings saved.")
