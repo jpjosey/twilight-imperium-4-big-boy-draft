@@ -13,7 +13,7 @@ players = sb.table("players").select("*").execute().data
 
 if not players:
   st.subheader("New Game Setup")
-  names - st.text_area("Player names (one per line)")
+  names = st.text_area("Player names (one per line)")
   if st.button("Create"):
     rows = [{"name": n.strip()} for n in names.splitlines() if n.strip()]
     if rows:
