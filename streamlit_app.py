@@ -54,6 +54,8 @@ def tile_icons(t):
 st.title("Milty Draft PoC")
 
 tiles, images = load_tiles()
+st.write(sorted(str(p) for p in Path("tiles").iterdir())[:15])
+st.write(f"{len(images)} images matched")
 players = sb.table("players").select("*").order("id").execute().data
 
 main_tab, tiles_tab, admin_tab = st.tabs(["Main", "Tiles", "Admin"])
