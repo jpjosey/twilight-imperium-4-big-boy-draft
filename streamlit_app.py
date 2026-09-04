@@ -12,6 +12,7 @@ sb = create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
 TILE_DATA = Path("tiles/tiles.json")
 IMAGE_DIR = Path("tiles")
 ICON_DIR = Path("icons")
+FACTION_DATA = Path("factions/factions.json")
 
 ICON_LABELS = {
     "legendary.png": "legendary",
@@ -76,6 +77,28 @@ def load_icons():
     return icons
 
 
+def load_factions():
+    return json.loads(FACTION_DATA.read_text())
+
+
+def load_faction_icons(factions):
+    out = {}
+    for fid, f in factions.items():
+        data = base64.b64encode(Path(f["icon"]).read_bytes()).decode()
+        out[fid] = f"data:image/png;base64,{data}"
+    return out
+
+
+def faction_name_html(f, icon_uri):
+    img = f'<img src="{icon_uri}" width="24" style="vertical-align:middle">'
+    return (
+        f'<div style="text-align:center; height:34px">'
+        f'{img} <a href="{f["wiki"]}" target="_blank" '
+        f'style="text-decoration:none">{f["name"]}</a> {img}'
+        f'</div>'
+    )
+
+
 def get_config(key, default):
     rows = sb.table("config").select("value").eq("key", key).execute().data
     return rows[0]["value"] if rows else default
@@ -114,7 +137,7 @@ def slice_summary(tile_ids, tiles):
     total = {f: 0 for f in SUM_FIELDS}
     for tid in tile_ids:
         for f in SUM_FIELDS:
-            total[f] += tiles[tid].get(f,0)
+            total[f] += tiles[tid].get(f, 0)
     return total
 
 
@@ -181,13 +204,18 @@ def generate_slices(tiles, weights, s, num_slices):
             )
     return slices, None
 
+
 st.title("TI4 Big Boy Draft")
 
 tiles, images = load_tiles()
 icons = load_icons()
+factions = load_factions()
+faction_icons = load_faction_icons(factions)
 players = sb.table("players").select("*").order("id").execute().data
 
-main_tab, tiles_tab, settings_tab = st.tabs(["Main", "Tiles", "Settings"])
+main_tab, tiles_tab, factions_tab, settings_tab = st.tabs(
+    ["Main", "Tiles", "Factions", "Settings"]
+)
 
 with main_tab:
     st.subheader("Sign-up sheet")
@@ -264,6 +292,35 @@ with tiles_tab:
         new_weights = {tid: st.session_state[f"w{tid}"] for tid in tile_ids}
         set_config("tile_weights", new_weights)
         st.success("Weights saved.")
+
+with factions_tab:
+    fweights = get_config("faction_weights", {})
+    fids = sorted(factions.keys(), key=lambda k: factions[k]["name"])
+
+    PER_ROW = 3
+    for i in range(0, len(fids), PER_ROW):
+        cols = st.columns(PER_ROW)
+        for col, fid in zip(cols, fids[i : i + PER_ROW]):
+            f = factions[fid]
+            with col:
+                st.image(f["quickref"])
+                st.markdown(
+                    faction_name_html(f, faction_icons[fid]),
+                    unsafe_allow_html=True,
+                )
+                st.number_input(
+                    "weight",
+                    min_value=0.0,
+                    step=0.5,
+                    value=float(fweights.get(fid, 1)),
+                    key=f"fw{fid}",
+                    label_visibility="collapsed",
+                )
+
+    if st.button("Save faction weights"):
+        new_fweights = {fid: st.session_state[f"fw{fid}"] for fid in fids}
+        set_config("faction_weights", new_fweights)
+        st.success("Faction weights saved.")
 
 with settings_tab:
     settings = get_config("slice_settings", DEFAULT_SLICE_SETTINGS)
