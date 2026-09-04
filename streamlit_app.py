@@ -121,6 +121,11 @@ def log(msg):
     sb.table("log").insert({"message": msg}).execute()
 
 
+def log_many(msgs):
+    if msgs:
+        sb.table("log").insert([{"message": m} for m in msgs]).execute()
+
+
 # ------------------------------------------------------------- rendering ----
 
 def faction_name_html(f, icon_uri):
@@ -202,50 +207,97 @@ def weighted_sample(pool, weights, k):
     return picked, pool
 
 
-def slice_ok(tile_ids, tiles, s):
+def slice_violations(tile_ids, tiles, s):
+    """Return a list of human-readable reasons this slice fails; empty = ok."""
     t = slice_summary(tile_ids, tiles)
-    wh = t["numalphawormholes"] + t["numbetawormholes"]
-    opt_total = t["optimalres"] + t["optimalinf"]
-    return (
-        s["MinWormholes"] <= wh <= s["MaxWormholes"]
-        and s["MinLegendary"] <= t["numlegendary"] <= s["MaxLegendary"]
-        and s["MinRes"] <= t["totalres"] <= s["MaxRes"]
-        and s["MinInf"] <= t["totalinf"] <= s["MaxInf"]
-        and s["MinOptRes"] <= t["optimalres"] <= s["MaxOptRes"]
-        and s["MinOptInf"] <= t["optimalinf"] <= s["MaxOptInf"]
-        and s["MinOptTotal"] <= opt_total <= s["MaxOptTotal"]
-    )
+    checks = [
+        ("wormholes", t["numalphawormholes"] + t["numbetawormholes"],
+         s["MinWormholes"], s["MaxWormholes"]),
+        ("legendary", t["numlegendary"], s["MinLegendary"], s["MaxLegendary"]),
+        ("res", t["totalres"], s["MinRes"], s["MaxRes"]),
+        ("inf", t["totalinf"], s["MinInf"], s["MaxInf"]),
+        ("optres", t["optimalres"], s["MinOptRes"], s["MaxOptRes"]),
+        ("optinf", t["optimalinf"], s["MinOptInf"], s["MaxOptInf"]),
+        ("opttotal", t["optimalres"] + t["optimalinf"],
+         s["MinOptTotal"], s["MaxOptTotal"]),
+    ]
+    return [
+        f"{name}={val:g} outside [{lo:g},{hi:g}]"
+        for name, val, lo, hi in checks
+        if not lo <= val <= hi
+    ]
+
+
+def slice_ok(tile_ids, tiles, s):
+    return not slice_violations(tile_ids, tiles, s)
 
 
 def generate_slices(tiles, weights, s, num_slices):
+    trace = []
     blue_pool = [t for t in tiles if tiles[t]["back"] == "blue" and weights.get(t, 1) > 0]
     red_pool = [t for t in tiles if tiles[t]["back"] == "red" and weights.get(t, 1) > 0]
+    no_back = [t for t in tiles if tiles[t]["back"] not in ("blue", "red")]
+
+    trace.append(
+        f"SLICEGEN: {len(blue_pool)} blue / {len(red_pool)} red enabled, "
+        f"{len(no_back)} tiles with no back"
+        + (f" ({', '.join(sorted(no_back, key=int))})" if no_back else "")
+    )
+    trace.append(
+        f"SLICEGEN: want {num_slices} slices of {s['blueTiles']}B+{s['redTiles']}R; "
+        f"limits opttotal [{s['MinOptTotal']:g},{s['MaxOptTotal']:g}] "
+        f"optres [{s['MinOptRes']:g},{s['MaxOptRes']:g}] "
+        f"optinf [{s['MinOptInf']:g},{s['MaxOptInf']:g}] "
+        f"res [{s['MinRes']:g},{s['MaxRes']:g}] inf [{s['MinInf']:g},{s['MaxInf']:g}] "
+        f"wh [{s['MinWormholes']:g},{s['MaxWormholes']:g}] "
+        f"leg [{s['MinLegendary']:g},{s['MaxLegendary']:g}]"
+    )
 
     need_blue = num_slices * s["blueTiles"]
     need_red = num_slices * s["redTiles"]
     if len(blue_pool) < need_blue:
-        return None, f"Not enough blue tiles: need {need_blue}, have {len(blue_pool)} enabled."
+        trace.append(f"SLICEGEN: FAILED - need {need_blue} blue, have {len(blue_pool)}")
+        return None, f"Not enough blue tiles: need {need_blue}, have {len(blue_pool)} enabled.", trace
     if len(red_pool) < need_red:
-        return None, f"Not enough red tiles: need {need_red}, have {len(red_pool)} enabled."
+        trace.append(f"SLICEGEN: FAILED - need {need_red} red, have {len(red_pool)}")
+        return None, f"Not enough red tiles: need {need_red}, have {len(red_pool)} enabled.", trace
 
     blues, reds = list(blue_pool), list(red_pool)
     slices = []
     for n in range(num_slices):
-        for _ in range(5):
+        for attempt in range(1, 6):
             cand_b, rest_b = weighted_sample(blues, weights, s["blueTiles"])
             cand_r, rest_r = weighted_sample(reds, weights, s["redTiles"])
             cand = cand_b + cand_r
-            if slice_ok(cand, tiles, s):
+            bad = slice_violations(cand, tiles, s)
+            summ = slice_summary(cand, tiles)
+            desc = (
+                f"tiles {'+'.join(cand)} "
+                f"res {summ['totalres']:g} inf {summ['totalinf']:g} "
+                f"opt {summ['optimalres']:g}/{summ['optimalinf']:g} "
+                f"= {summ['optimalres'] + summ['optimalinf']:g}"
+            )
+            if not bad:
+                trace.append(f"SLICEGEN: slice {n + 1} ok on try {attempt} - {desc}")
                 random.shuffle(cand)
                 slices.append(cand)
                 blues, reds = rest_b, rest_r
                 break
+            trace.append(
+                f"SLICEGEN: slice {n + 1} try {attempt} rejected - {desc} "
+                f"[{'; '.join(bad)}]"
+            )
         else:
+            trace.append(
+                f"SLICEGEN: FAILED at slice {n + 1}; "
+                f"{len(blues)} blue / {len(reds)} red left in pool"
+            )
             return None, (
                 f"Slice {n + 1} failed after 5 attempts. "
-                "Try again, loosen settings, or enable more tiles."
-            )
-    return slices, None
+                "Try again, loosen settings, or enable more tiles. See the Log tab."
+            ), trace
+    trace.append(f"SLICEGEN: success, {len(slices)} slices generated")
+    return slices, None, trace
 
 
 def draw_factions(factions, fweights, num_safe, num_maybe):
@@ -726,9 +778,10 @@ with settings_tab:
             if n < 1:
                 st.error("Nobody has signed up.")
             else:
-                new_slices, err = generate_slices(
+                new_slices, err, trace = generate_slices(
                     tiles, weights, settings, int(num_slices)
                 )
+                log_many(trace)
                 if err:
                     st.error(err)
                 else:
