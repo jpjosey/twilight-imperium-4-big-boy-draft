@@ -131,7 +131,8 @@ def log_many(msgs):
 def faction_name_html(f, icon_uri):
     img = f'<img src="{icon_uri}" width="24" style="vertical-align:middle">'
     return (
-        f'<div style="text-align:center; height:34px">'
+        f'<div style="text-align:center; min-height:34px; line-height:1.4; '
+        f'padding-bottom:6px">'
         f'{img} <a href="{f["wiki"]}" target="_blank" '
         f'style="text-decoration:none">{f["name"]}</a> {img}'
         f'</div>'
