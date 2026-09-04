@@ -533,7 +533,7 @@ with main_tab:
                 st.caption(
                     "You can only lock in once. Bonus trade goods = "
                     "(highest total bids of anyone) minus (your total bid)."
-                    "Ties will be broken by a dice roll (visible in the log tab).
+                    "Ties will be broken by a dice roll (visible in the log tab)."
                 )
                 if st.button("LOCK IN"):
                     sb.table("players").update(
