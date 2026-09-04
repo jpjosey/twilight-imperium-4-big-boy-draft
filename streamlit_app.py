@@ -552,9 +552,23 @@ with main_tab:
 
             if entry is None:
                 st.header("DRAFT COMPLETE")
-            else:
-                st.markdown(f"### Action on: {describe(entry, pmap)}")
-                st.markdown(f"Up next: {describe(nxt, pmap)}")
+
+            st.subheader("Draft order")
+            rows = []
+            for i, (ph, pid) in enumerate(state.get("schedule", [])):
+                text = f"{i + 1}. {pmap.get(pid, '?')} - {PHASE_ACTIONS[ph]}"
+                if i < step:
+                    rows.append(
+                        f'<div style="opacity:0.35; line-height:1.6">{text}</div>'
+                    )
+                elif i == step:
+                    rows.append(
+                        f'<div style="font-size:1.5em; font-weight:700; '
+                        f'line-height:1.6; margin:4px 0">&#9654; {text}</div>'
+                    )
+                else:
+                    rows.append(f'<div style="line-height:1.6">{text}</div>')
+            st.markdown("".join(rows), unsafe_allow_html=True)
 
             phase = entry[0] if entry else None
             my_turn = bool(me and entry and entry[1] == me["id"])
