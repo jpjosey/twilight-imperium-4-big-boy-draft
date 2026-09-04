@@ -24,6 +24,7 @@ ICON_LABELS = {
     "greenskip.png": "green skip",
     "WHalpha.png": "a-hole",
     "WHbeta.png": "b-hole",
+    "CommodityBonus.png": "trade station",
 }
 
 DEFAULT_SLICE_SETTINGS = {
@@ -49,7 +50,7 @@ SUM_FIELDS = [
     "numalphawormholes", "numbetawormholes", "totalres", "totalinf",
     "optimalres", "optimalinf", "numyellowskips", "numblueskips",
     "numredskips", "numgreenskips", "numcultural", "numhazardous",
-    "numindustrial", "numlegendary",
+    "numindustrial", "numlegendary", "numtradestations",
 ]
 
 
@@ -96,6 +97,7 @@ def tile_icon_files(t):
     files += ["greenskip.png"] * t["numgreenskips"]
     files += ["WHalpha.png"] * t["numalphawormholes"]
     files += ["WHbeta.png"] * t["numbetawormholes"]
+    files += ["CommodityBonus.png"] * t.get("numtradestations", 0)
     return files
 
 
@@ -112,7 +114,7 @@ def slice_summary(tile_ids, tiles):
     total = {f: 0 for f in SUM_FIELDS}
     for tid in tile_ids:
         for f in SUM_FIELDS:
-            total[f] += tiles[tid][f]
+            total[f] += tiles[tid].get(f,0)
     return total
 
 
