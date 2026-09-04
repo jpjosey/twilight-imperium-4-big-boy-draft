@@ -449,7 +449,10 @@ with main_tab:
         # ------------------------------------------------ bidding ----
         if not state.get("revealed"):
             st.subheader("Secret bids")
-            st.caption("Nobody sees anybody's bids until everyone has locked in.")
+            st.caption(
+                "Everything you are bidding on is shown below. "
+                "Nobody sees anybody's bids until everyone has locked in."
+            )
             if me is None:
                 st.info("Log in via the sidebar to place your bids.")
             elif me["locked"]:
@@ -462,7 +465,10 @@ with main_tab:
                     bt = st.number_input("Turn order bid", min_value=0, step=1, value=0)
                 with c3:
                     bs = st.number_input("Slice bid", min_value=0, step=1, value=0)
-                st.caption("You can only lock in once. Choose carefully.")
+                st.caption(
+                    "You can only lock in once. Bonus trade goods = "
+                    "(highest total bid of anyone) minus (your total bid)."
+                )
                 if st.button("LOCK IN"):
                     sb.table("players").update(
                         {
@@ -477,6 +483,12 @@ with main_tab:
                     if all(p["locked"] for p in fresh):
                         set_config("draft_state", reveal_bids(fresh, state))
                     st.rerun()
+
+            entry = None
+            nxt = None
+            step = 0
+            phase = None
+            my_turn = False
 
         # ------------------------------------------------ drafting ----
         else:
@@ -494,119 +506,120 @@ with main_tab:
             phase = entry[0] if entry else None
             my_turn = bool(me and entry and entry[1] == me["id"])
 
-            # --- factions ---
-            st.divider()
-            st.subheader("FACTIONS")
+        # ------------------------------- pools (always visible) ----
+        # --- factions ---
+        st.divider()
+        st.subheader("FACTIONS")
 
-            if state.get("maybe"):
-                st.markdown("**Maybe pool**")
-                mcols = st.columns(min(len(state["maybe"]), 5))
-                for i, fid in enumerate(state["maybe"]):
-                    f = factions[fid]
-                    with mcols[i % len(mcols)]:
-                        st.image(f["quickref"])
-                        st.markdown(
-                            faction_name_html(f, faction_icons[fid]),
-                            unsafe_allow_html=True,
-                        )
-                        if my_turn and phase == "faction_ban":
-                            if st.button("BAN", key=f"ban{fid}"):
-                                s2 = dict(state)
-                                s2["maybe"] = [x for x in state["maybe"] if x != fid]
-                                s2["banned"] = state.get("banned", []) + [fid]
-                                # last ban of the phase: survivors join the pool
-                                if not nxt or nxt[0] != "faction_ban":
-                                    s2["pool"] = state["pool"] + s2["maybe"]
-                                    s2["maybe"] = []
-                                commit(
-                                    s2, step,
-                                    f"{me['name']} banned {f['name']}.",
-                                )
-
-            st.markdown("**Faction pool**")
-            pool = state.get("pool", [])
-            if pool:
-                pcols = st.columns(min(len(pool), 5))
-                for i, fid in enumerate(pool):
-                    f = factions[fid]
-                    with pcols[i % len(pcols)]:
-                        st.image(f["quickref"])
-                        st.markdown(
-                            faction_name_html(f, faction_icons[fid]),
-                            unsafe_allow_html=True,
-                        )
-                        if my_turn and phase == "faction_pick":
-                            if st.button("PICK", key=f"pick{fid}"):
-                                s2 = dict(state)
-                                s2["pool"] = [x for x in pool if x != fid]
-                                a2 = dict(state.get("assignments", {}))
-                                mine = dict(a2.get(str(me["id"]), {}))
-                                mine["faction"] = fid
-                                a2[str(me["id"])] = mine
-                                s2["assignments"] = a2
-                                commit(
-                                    s2, step,
-                                    f"{me['name']} picked {f['name']}.",
-                                )
-            else:
-                st.caption("empty")
-
-            if state.get("banned"):
-                st.markdown("**Banned**")
-                bcols = st.columns(min(len(state["banned"]), 5))
-                for i, fid in enumerate(state["banned"]):
-                    with bcols[i % len(bcols)]:
-                        st.markdown(
-                            faction_name_html(factions[fid], faction_icons[fid]),
-                            unsafe_allow_html=True,
-                        )
-
-            # --- turn order ---
-            st.divider()
-            st.subheader("TURN ORDER")
-            scols = st.columns(n)
-            for i, seat in enumerate(range(1, n + 1)):
-                with scols[i]:
-                    label = "Speaker" if seat == 1 else f"Seat {seat}"
-                    st.markdown(f"**{label}**")
-                    owner = next(
-                        (pmap[int(k)] for k, a in assign.items() if a.get("seat") == seat),
-                        None,
+        if state.get("maybe"):
+            st.markdown("**Maybe pool**")
+            mcols = st.columns(min(len(state["maybe"]), 5))
+            for i, fid in enumerate(state["maybe"]):
+                f = factions[fid]
+                with mcols[i % len(mcols)]:
+                    st.image(f["quickref"])
+                    st.markdown(
+                        faction_name_html(f, faction_icons[fid]),
+                        unsafe_allow_html=True,
                     )
-                    if owner:
-                        st.write(owner)
-                    elif my_turn and phase == "turn_order":
-                        if st.button("PICK", key=f"seat{seat}"):
+                    if my_turn and phase == "faction_ban":
+                        if st.button("BAN", key=f"ban{fid}"):
                             s2 = dict(state)
+                            s2["maybe"] = [x for x in state["maybe"] if x != fid]
+                            s2["banned"] = state.get("banned", []) + [fid]
+                            # last ban of the phase: survivors join the pool
+                            if not nxt or nxt[0] != "faction_ban":
+                                s2["pool"] = state["pool"] + s2["maybe"]
+                                s2["maybe"] = []
+                            commit(
+                                s2, step,
+                                f"{me['name']} banned {f['name']}.",
+                            )
+
+        st.markdown("**Faction pool**")
+        pool = state.get("pool", [])
+        if pool:
+            pcols = st.columns(min(len(pool), 5))
+            for i, fid in enumerate(pool):
+                f = factions[fid]
+                with pcols[i % len(pcols)]:
+                    st.image(f["quickref"])
+                    st.markdown(
+                        faction_name_html(f, faction_icons[fid]),
+                        unsafe_allow_html=True,
+                    )
+                    if my_turn and phase == "faction_pick":
+                        if st.button("PICK", key=f"pick{fid}"):
+                            s2 = dict(state)
+                            s2["pool"] = [x for x in pool if x != fid]
                             a2 = dict(state.get("assignments", {}))
                             mine = dict(a2.get(str(me["id"]), {}))
-                            mine["seat"] = seat
+                            mine["faction"] = fid
                             a2[str(me["id"])] = mine
                             s2["assignments"] = a2
-                            commit(s2, step, f"{me['name']} took seat {seat}.")
-                    else:
-                        st.caption("open")
+                            commit(
+                                s2, step,
+                                f"{me['name']} picked {f['name']}.",
+                            )
+        else:
+            st.caption("empty")
 
-            # --- slices ---
-            st.divider()
-            st.subheader("SLICE POOL")
-            for i, sl in enumerate(slices or []):
+        if state.get("banned"):
+            st.markdown("**Banned**")
+            bcols = st.columns(min(len(state["banned"]), 5))
+            for i, fid in enumerate(state["banned"]):
+                with bcols[i % len(bcols)]:
+                    st.markdown(
+                        faction_name_html(factions[fid], faction_icons[fid]),
+                        unsafe_allow_html=True,
+                    )
+
+        # --- turn order ---
+        st.divider()
+        st.subheader("TURN ORDER")
+        scols = st.columns(n)
+        for i, seat in enumerate(range(1, n + 1)):
+            with scols[i]:
+                label = "Speaker" if seat == 1 else f"Seat {seat}"
+                st.markdown(f"**{label}**")
                 owner = next(
-                    (pmap[int(k)] for k, a in assign.items() if a.get("slice") == i),
+                    (pmap[int(k)] for k, a in assign.items() if a.get("seat") == seat),
                     None,
                 )
-                st.markdown(f"**Slice {i + 1}**" + (f" - {owner}" if owner else ""))
-                show_slice(sl, tiles, images, icons)
-                if owner is None and my_turn and phase == "slice":
-                    if st.button("PICK", key=f"slice{i}"):
+                if owner:
+                    st.write(owner)
+                elif my_turn and phase == "turn_order":
+                    if st.button("PICK", key=f"seat{seat}"):
                         s2 = dict(state)
                         a2 = dict(state.get("assignments", {}))
                         mine = dict(a2.get(str(me["id"]), {}))
-                        mine["slice"] = i
+                        mine["seat"] = seat
                         a2[str(me["id"])] = mine
                         s2["assignments"] = a2
-                        commit(s2, step, f"{me['name']} took slice {i + 1}.")
-                st.divider()
+                        commit(s2, step, f"{me['name']} took seat {seat}.")
+                else:
+                    st.caption("open")
+
+        # --- slices ---
+        st.divider()
+        st.subheader("SLICE POOL")
+        for i, sl in enumerate(slices or []):
+            owner = next(
+                (pmap[int(k)] for k, a in assign.items() if a.get("slice") == i),
+                None,
+            )
+            st.markdown(f"**Slice {i + 1}**" + (f" - {owner}" if owner else ""))
+            show_slice(sl, tiles, images, icons)
+            if owner is None and my_turn and phase == "slice":
+                if st.button("PICK", key=f"slice{i}"):
+                    s2 = dict(state)
+                    a2 = dict(state.get("assignments", {}))
+                    mine = dict(a2.get(str(me["id"]), {}))
+                    mine["slice"] = i
+                    a2[str(me["id"])] = mine
+                    s2["assignments"] = a2
+                    commit(s2, step, f"{me['name']} took slice {i + 1}.")
+            st.divider()
 
 with tiles_tab:
     weights = get_config("tile_weights", {})
