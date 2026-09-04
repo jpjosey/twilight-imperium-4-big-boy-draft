@@ -514,13 +514,26 @@ with main_tab:
                 c1, c2, c3 = st.columns(3)
                 with c1:
                     bf = st.number_input("Faction bid", min_value=0, step=1, value=0)
+                    st.caption(
+                        "Highest bidder bans a faction first and lowest bans last. "
+                        "Then, in that same order, highest picks their faction first "
+                        "and lowest picks last."
+                    )
                 with c2:
                     bt = st.number_input("Turn order bid", min_value=0, step=1, value=0)
+                    st.caption(
+                        "Highest bidder picks their seat first and lowest picks last. "
+                        "Seat 1 is the speaker."
+                    )
                 with c3:
                     bs = st.number_input("Slice bid", min_value=0, step=1, value=0)
+                    st.caption(
+                        "Highest bidder picks their slice first and lowest picks last."
+                    )
                 st.caption(
                     "You can only lock in once. Bonus trade goods = "
-                    "(highest total bid of anyone) minus (your total bid)."
+                    "(highest total bids of anyone) minus (your total bid)."
+                    "Ties will be broken by a dice roll (visible in the log tab).
                 )
                 if st.button("LOCK IN"):
                     sb.table("players").update(
