@@ -442,8 +442,8 @@ main_tab, tiles_tab, factions_tab, settings_tab, log_tab = st.tabs(
 )
 
 with main_tab:
-if state:
-    st_autorefresh(interval=5000, key="draftpoll")
+    if state:
+        st_autorefresh(interval=5000, key="draftpoll")
     slices = get_config("slices", None)
 
     # ---------------------------------------------------- pre-draft ----
