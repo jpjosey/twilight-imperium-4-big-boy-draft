@@ -395,8 +395,7 @@ def commit(state, expected_step, message):
 
 
 # ------------------------------------------------------------------- app ----
-if state:
-    st_autorefresh(interval=5000, key="draftpoll")
+
 
 
 st.title("TI4 Big Boy Draft")
@@ -443,6 +442,8 @@ main_tab, tiles_tab, factions_tab, settings_tab, log_tab = st.tabs(
 )
 
 with main_tab:
+if state:
+    st_autorefresh(interval=5000, key="draftpoll")
     slices = get_config("slices", None)
 
     # ---------------------------------------------------- pre-draft ----
