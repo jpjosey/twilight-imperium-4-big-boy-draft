@@ -7,6 +7,8 @@ from pathlib import Path
 import streamlit as st
 from supabase import create_client
 
+from streamlit_autorefresh import st_autorefresh
+
 sb = create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
 
 TILE_DATA = Path("tiles/tiles.json")
