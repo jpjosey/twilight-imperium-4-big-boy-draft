@@ -395,6 +395,9 @@ def commit(state, expected_step, message):
 
 
 # ------------------------------------------------------------------- app ----
+if state:
+    st_autorefresh(interval=5000, key="draftpoll")
+
 
 st.title("TI4 Big Boy Draft")
 
