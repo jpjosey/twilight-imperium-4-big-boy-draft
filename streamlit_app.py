@@ -76,6 +76,7 @@ def hash_pin(pin: str) -> str:
     return hashlib.sha256(pin.encode()).hexdigest()
 
 
+@st.cache_data
 def load_tiles():
     tiles = json.loads(TILE_DATA.read_text())
     images = {}
@@ -86,6 +87,7 @@ def load_tiles():
     return tiles, images
 
 
+@st.cache_data
 def load_icons():
     icons = {}
     for fname in ICON_LABELS:
@@ -94,13 +96,15 @@ def load_icons():
     return icons
 
 
+@st.cache_data
 def load_factions():
     return json.loads(FACTION_DATA.read_text())
 
 
-def load_faction_icons(factions):
+@st.cache_data
+def load_faction_icons():
     out = {}
-    for fid, f in factions.items():
+    for fid, f in load_factions().items():
         data = base64.b64encode(Path(f["icon"]).read_bytes()).decode()
         out[fid] = f"data:image/png;base64,{data}"
     return out
@@ -297,7 +301,7 @@ def generate_slices(tiles, weights, s, num_slices):
             )
             return None, (
                 f"Slice {n + 1} failed after 5 attempts. "
-                "Try again, loosen settings, or enable more tiles. See the Log tab."
+                "Try again, loosen settings, or enable more tiles. See the Log page."
             ), trace
     trace.append(f"SLICEGEN: success, {len(slices)} slices generated")
     return slices, None, trace
@@ -376,13 +380,6 @@ def current_entry(state):
     return sched[step] if step < len(sched) else None
 
 
-def describe(entry, pmap):
-    if not entry:
-        return "draft complete"
-    phase, pid = entry
-    return f"{pmap.get(pid, '?')} to {PHASE_ACTIONS[phase]}"
-
-
 def commit(state, expected_step, message):
     """Write state back only if nobody else moved first."""
     live = get_config("draft_state", None)
@@ -398,14 +395,12 @@ def commit(state, expected_step, message):
 
 # ------------------------------------------------------------------- app ----
 
-
-
 st.title("TI4 Big Boy Draft")
 
 tiles, images = load_tiles()
 icons = load_icons()
 factions = load_factions()
-faction_icons = load_faction_icons(factions)
+faction_icons = load_faction_icons()
 players = get_players()
 pmap = {p["id"]: p["name"] for p in players}
 state = get_config("draft_state", None)
@@ -415,8 +410,11 @@ if state and not state.get("revealed") and players and all(p["locked"] for p in 
     state = reveal_bids(players, state)
     set_config("draft_state", state)
 
-# --- sidebar login ---
+# --- sidebar: navigation, then login ---
 with st.sidebar:
+    page = st.radio("Page", ["Main", "Tiles", "Factions", "Settings", "Log"])
+
+    st.divider()
     st.header("Who are you?")
     me = None
     if "player_id" in st.session_state:
@@ -439,11 +437,10 @@ with st.sidebar:
     else:
         st.write("Nobody has signed up yet.")
 
-main_tab, tiles_tab, factions_tab, settings_tab, log_tab = st.tabs(
-    ["Main", "Tiles", "Factions", "Settings", "Log"]
-)
 
-with main_tab:
+# =============================================================== MAIN =======
+
+if page == "Main":
     if state:
         st_autorefresh(interval=5000, key="draftpoll")
     slices = get_config("slices", None)
@@ -539,7 +536,7 @@ with main_tab:
                 st.caption(
                     "You can only lock in once. Bonus trade goods = "
                     "(highest total bids of anyone) minus (your total bid)."
-                    "Ties will be broken by a dice roll (visible in the log tab)."
+                    "Ties will be broken by a dice roll (visible in the log page)."
                 )
                 if st.button("LOCK IN"):
                     sb.table("players").update(
@@ -707,7 +704,10 @@ with main_tab:
                     commit(s2, step, f"{me['name']} took slice {i + 1}.")
             st.divider()
 
-with tiles_tab:
+
+# ============================================================== TILES =======
+
+elif page == "Tiles":
     weights = get_config("tile_weights", {})
     tile_ids = sorted(tiles.keys(), key=int)
 
@@ -740,7 +740,10 @@ with tiles_tab:
         set_config("tile_weights", new_weights)
         st.success("Weights saved.")
 
-with factions_tab:
+
+# =========================================================== FACTIONS =======
+
+elif page == "Factions":
     fweights = get_config("faction_weights", {})
     fids = sorted(factions.keys(), key=lambda k: factions[k]["name"])
 
@@ -769,7 +772,10 @@ with factions_tab:
         set_config("faction_weights", new_fweights)
         st.success("Faction weights saved.")
 
-with settings_tab:
+
+# =========================================================== SETTINGS =======
+
+elif page == "Settings":
     settings = get_config("slice_settings", DEFAULT_SLICE_SETTINGS)
     settings = {**DEFAULT_SLICE_SETTINGS, **settings}
     weights = get_config("tile_weights", {})
@@ -908,7 +914,10 @@ with settings_tab:
             set_config("slice_settings", {**settings, **new_settings})
             st.success("Settings saved.")
 
-with log_tab:
+
+# ================================================================ LOG =======
+
+elif page == "Log":
     rows = sb.table("log").select("*").order("id", desc=True).limit(300).execute().data
     if not rows:
         st.write("Nothing logged yet.")
